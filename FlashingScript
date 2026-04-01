@@ -1,0 +1,30 @@
+import tkinter as tk
+import screen_brightness_control as sbc  # pip install screen_brightness_control
+
+FLASHDURATION = 1  # 1 second
+
+def ThinkFastChuckleNuts():
+    # Save current brightness (returns a list on some systems)
+    initial_brightness = sbc.get_brightness()
+    if isinstance(initial_brightness, list):
+        initial_brightness = initial_brightness[0]
+
+    # Set to max brightness
+    sbc.set_brightness(100)
+
+    root = tk.Tk()
+    root.attributes("-fullscreen", True)
+    root.configure(background='white')
+    root.attributes("-topmost", True)
+
+    def close_window():
+        sbc.set_brightness(initial_brightness)
+        root.destroy()
+
+    # Close after 1 second
+    root.after(FLASHDURATION * 1000, close_window)
+    root.mainloop()
+
+if __name__ == "__main__":
+    ThinkFastChuckleNuts()
+

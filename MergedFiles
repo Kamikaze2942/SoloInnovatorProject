@@ -1,0 +1,99 @@
+import psutil
+import time
+import datetime
+import threading
+import tkinter as tk
+import screen_brightness_control as sbc  # pip install screen_brightness_control
+
+
+class GameMonitor:
+    def __init__(self, game_process_name, time_limit_seconds, flash_duration=1, check_interval=1):
+        self.game_process_name = game_process_name
+        self.time_limit_seconds = time_limit_seconds
+        self.flash_duration = flash_duration
+        self.check_interval = check_interval
+
+        self.session_started = None
+        self.time_limit_reached = False
+        self.last_flash_time = None
+        self.flash_interval = 5  # seconds between flashes
+
+    def is_game_running(self):
+        for proc in psutil.process_iter(['name']):
+            try:
+                if proc.info['name'] and proc.info['name'].lower() == self.game_process_name.lower():
+                    return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        return False
+
+    def flash_screen(self):
+        """Flash the screen at maximum brightness without notification."""
+        def _flash():
+            try:
+                initial_brightness = sbc.get_brightness()
+                if isinstance(initial_brightness, list):
+                    initial_brightness = initial_brightness[0]
+
+                sbc.set_brightness(100)
+
+                root = tk.Tk()
+                root.attributes("-fullscreen", True)
+                root.configure(background='white')
+                root.attributes("-topmost", True)
+
+                def close_window():
+                    sbc.set_brightness(initial_brightness)
+                    root.destroy()
+
+                root.after(int(self.flash_duration * 1000), close_window)
+                root.mainloop()
+            except Exception as e:
+                print(f"Failed to flash screen: {e}")
+
+        threading.Thread(target=_flash, daemon=True).start()
+
+    def check_game(self):
+        now = datetime.datetime.now()
+
+        if self.is_game_running():
+            if self.session_started is None:
+                self.session_started = now
+                print(f"Game started at {self.session_started}")
+
+            elapsed_time = (now - self.session_started).total_seconds()
+
+            if elapsed_time >= self.time_limit_seconds:
+                if not self.time_limit_reached:
+                    # First time reaching limit
+                    print("Time limit reached! Starting flashing...")
+                    self.flash_screen()
+                    self.time_limit_reached = True
+                    self.last_flash_time = now
+                else:
+                    # Keep flashing every 5 seconds
+                    if self.last_flash_time is None or (now - self.last_flash_time).total_seconds() >= self.flash_interval:
+                        self.flash_screen()
+                        self.last_flash_time = now
+        else:
+            if self.session_started is not None:
+                print("Game closed. Resetting timer.")
+            self.session_started = None
+            self.time_limit_reached = False
+            self.last_flash_time = None
+
+    def run(self):
+        print("Monitoring for game process...")
+        while True:
+            self.check_game()
+            time.sleep(self.check_interval)
+
+
+if __name__ == "__main__":
+    monitor = GameMonitor(
+        game_process_name="dmc3.exe",  # change this to your game's process name
+        time_limit_seconds=5,          # time before flashing starts
+        flash_duration=1,              # how long each flash lasts
+        check_interval=1               # how often to check (lower = more precise)
+    )
+    monitor.run()
